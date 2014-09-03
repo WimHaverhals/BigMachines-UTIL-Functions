@@ -1,0 +1,569 @@
+//************************************************************************************************************
+//** Function:    CTL Check TN Portability (ctlCheckTnPortability)
+//** Type:        Utility Library Function   
+//**
+//** Description: Check portability on an array of TNs from an external system.  
+//**              Return a dictionary of TNs and the corresponding return code and error message (string array).
+//**
+//** Util Params: String Dictionary:QuoteValues | keys: defined below | values: defined below
+//**              String[] TNsArray - a list of TNs to check portability
+//** 
+//** Return type: String[] dictionary
+//**              dictionary key - TNs
+//**              value - string array of return code[0] and error message [1] (if exist)
+//**
+//** History:     Date		Author		Story		Comment
+//**		  08/18/2014	Wim Haverhals	US2841		Initial Build, copied from acqCheckTNPortability
+//**                                                            Util Function.
+//************************************************************************************************************
+print "***** CTL Check TN Portability has been called *******";
+/* LIST of keys for quote info dictionary
+    SYSTEM          - _system_supplier_company_name
+    QUOTENUMBER     - quoteNumber_quote
+    TRANSACTIONID   - transactionID_quote
+    CURRENCY        - USD or if outputCurrency_quote is NOT empty then it's value
+    SESSIONID       - current session id
+        [Several missing here.  TODO: add in the missing keys]
+    XMLRequest      - Mock of XML sent to the pricing service
+    XMLResponse     - Mock of XML returned from the pricing service
+*/
+
+/*
+    NOTE: delimited strings are returned by the pricing web service, below are the details of those delimited strings
+    
+    general_info    - error messages, debug information, and similar high level data
+    pricingString   - for more information refer attribute description for pricingString_line
+    totalString     - for more information refer attribute description for totalsString_line
+*/
+
+/* The following code deals with timing, and must remain before any other code in this utility
+
+   The timing code will record the following time stamps:
+       Time on entry to this utility
+       Time imediately before call out to ESL pricing service
+       Time on return from the pricing service
+       Time just before returning from this utility
+       
+   The code will then calculate two durations: 
+       Total time spent in this utility
+       Total time spent waiting for the pricing service (also included in the former)
+       
+   These two durations will be added to the output dictionary under the key "INSTRUMENTATION" as a formatted string:
+       Total Utility Time^=^uuuuu^-^Total Callout Time^=^ccccc
+       
+   The durations uuuuu and ccccc will be in milliseconds
+*/
+
+msTimeOnUtilityEntry = getcurrenttimeinmillis();    // Get this first so we have an accurate reading of the entry time
+msTimeOnUtilityExit  = -1;                          // To indicate that time has not yet been recorded
+msTimeOnSvcCallout   = -1;
+msTimeOnSvcReturn    = -1;
+msUtilityDuration    = 0;
+msSvcCalloutDuration = 0;
+
+// End of timing related initialization code
+
+// The following deals with the ability to unit test the utility
+utErrorMessage          = "";                   // Error messages (if any) associated with unit testing
+
+
+//
+// key: {GENERAL_INFO, PORTABILITY_STRING, TOTAL_STRING}, 
+// value: corresponding dictionaries created above that stores the web service response
+retDict = dict("dict<string>"); 
+
+
+messageTypePartToModel  = dict("string");       // Key: model (parent document number); value: message type
+parentDocuments         = string[];             // List of all parent documents found in pricing results
+
+inputXML                = "";
+outputXML               = "";
+tnPortList              = "";
+brandInfoXML            = "";
+system                  = "";
+//
+// Constants
+//
+constFAILURE             = "FAILURE";
+constSUCCESS             = "SUCCESS";
+
+parentOuterDelim = "$=$";
+parentInnerDelim = "$-$";
+parentValueDelim = "$*$";
+childOuterDelim = "!=!";
+childInnerDelim = "!-!";
+childValueDelim = "!*!";
+dictDelim = "!$!";
+
+//ezPriceString           = "";
+//fdPriceString           = "";                   
+//appliedPromoString      = "";
+//ezPriceReturnStr        = "";
+//fdPriceReturnStr        = "";                   // [US 1212]
+//promoNameReturnStr      = "";                   // [US 1265]
+//brandCheckDict          = dict("integer");      // Brands encountered while processing the input data
+//brandSeqId              = 0;                    // Count the number of unique brands encountered
+//locationCheckDict       = dict("string");       // Locations encountered while processing the input datpriceItemInfoXML        = "";
+//pricedItemCount         = 0;                    // Temporary, to support stubbed pricing message responses
+//nrcWaiverString         = "";
+//nrcWaiverReturnStr      = "";
+
+//hasWaiverInfoList       = false;
+
+inputHeaders               = dict("string");
+docNumVsGeneralInfoDict    = dict("string"); // key: documentNumber, value: general information like 
+                                             // error message, fault string etc
+docNumVsPortStringsDict    = dict("string"); // key: documentNumber, value: pricing string present 
+                                             // in <PortabilityResponse> tag in the response xml
+docNumVsTotalStringsDict   = dict("string"); // key: documentNumber, value: total string present in <total> tag in the response xml
+docNumVsPriceResponseDict  = dict("string");    // key: compound key with doc # and keywords, value: MRC and NRC values from ESL response
+promoCodeVsNoToESLFlagDict = dict("string");   // key: IA Transition Promocode, value: Flag to Not sendToESL (Y/N)
+packageVsdocNumDict        = dict("string");   //List of IQPlus Package Parts
+docNumVsDataInputError     = dict("string");    // key: document number; value: error(s) found when building the XML input
+nextCctGrpId               = 1;               // Used to generate unique circuit group id numbers
+modelHLevVsCctGrpIdDict    = dict("string");  // Maps the model and heirarchy level prefix to a unique circuit group id 
+                                              // Key is "mn:hl" where mn is the doc # of the model, and hl is the first three
+                                              // digits of hierarchyLevel_line (E.g. in "001.002" this would be "001")
+        // Keys in the above dictionary are:
+        //  parentDocnum:PartDocnumList        : Comma separated list of part numbers for the given model (parent) doc num
+        //  parentDocnum:TotalLoopMrc          : The total loop MRC for the aggregate billed model
+        //  parentDocnum:ContractTerm          : The contract term in months
+        //        docnum:IsAggregate           : Present only if this part (not a model) is aggregate billed
+        //        docNum:MRC                   : The (final, net) MRC for an aggregate billed part
+        //        docnum:PORT_TYPE             : The port type of an aggregate billed part
+        //        docnum:QUANTITY              : The quantity of an aggregate billed part
+        //        docnum:WAN_BANDWIDTH         : The bandwidth in MB (unless 1500) of an aggregate billed part
+        //        docnum:EZLevel               : The EZ level for each aggregate billed part
+        //        docnum:ACCESS_SPEED          : The port's access speed (circuit speed) from the tech description
+
+//
+// Below a sample XML of the current ESL VoIP Portability Response Message format.  Code immediately following
+// this format block lists the TAGs that need to be identified for this response 
+//
+
+/*
+<ESLVoIPPortabilityResponse xmlns="http://www.centurylink.com/XMLSchema/ESL">
+   <ProcessStatus>SUCCESS</ProcessStatus>
+   <PortabilityResponseList>
+      <PortabilityResponse>
+         <TN>5183819340</TN>
+         <VoIPMessage>
+            <Code>5002</Code>
+            <Message>RateCenter (NY-SCHENCTADY) is not lit for the TN</Message>
+         </VoIPMessage>
+         <PortInDays>10</PortInDays>
+         <RateCenterInfo>
+            <ShortRateCenterName>NY-SCHENCTADY</ShortRateCenterName>
+         </RateCenterInfo>
+         <ServiceProviderName>VERIZON NEW YORK, INC.</ServiceProviderName>
+         <TradingParterInfo>
+            <PartnerRCShortName>NY-SCHENCTADY</PartnerRCShortName>
+         </TradingParterInfo>
+         <SPID>9104</SPID>
+         <PortType>PORT_IN</PortType>
+      </PortabilityResponse>
+      <PortabilityResponse>
+         <TN>5183819341</TN>
+         <VoIPMessage>
+            <Code>5002</Code>
+            <Message>RateCenter (NY-SCHENCTADY) is not lit for the TN</Message>
+         </VoIPMessage>
+         <PortInDays>10</PortInDays>
+         <RateCenterInfo>
+            <ShortRateCenterName>NY-SCHENCTADY</ShortRateCenterName>
+         </RateCenterInfo>
+         <ServiceProviderName>VERIZON NEW YORK, INC.</ServiceProviderName>
+         <TradingParterInfo>
+            <PartnerRCShortName>NY-SCHENCTADY</PartnerRCShortName>
+         </TradingParterInfo>
+         <SPID>9104</SPID>
+         <PortType>PORT_IN</PortType>
+      </PortabilityResponse>
+   </PortabilityResponseList>
+</ESLVoIPPortabilityResponse>
+*/
+//
+// list of outer tags in the response xml, stored in array so that we can loop through the tags up to the
+// point where we need to loop through a set of inner tags.  Keep this block of code together with the Response 
+// message format.    
+//
+//listOfTags      = string[] {"ESLVoIPPortabilityResponse", 
+//                            "ProcessStatus", 
+//                            "Exception", 
+//                            "PortabilityResponseList",
+//                            "PortabilityResponse"};          
+
+listOfTags      = string[] {"ProcessStatus", 
+                            "Exception", 
+                            "PortabilityResponseList",
+                            "PortabilityResponse"};          
+
+//
+// list of inner tags in the response xml, store in array so that we can loop
+//
+listOfInnerTags = string[] {"TN", 
+                            "VoIPMessage", 
+                            "Code", 
+                            "PortInDays", 
+                            "RateCenterInfo"};    
+//
+// list of inner tags in each ItemPriceList tag of the response xml, store in array so that we can loop
+//
+listOfPortResponseTags = string[] {"TN", 
+                                   "VoIPMessage", 
+                                   "Code",
+                                   "Message",
+                                   "PortInDays", 
+                                   "RateCenterInfo",
+                                   "ShortRateCenterName",
+                                   "ServiceProviderName",
+                                   "TradingPartnerInfo",
+                                   "PartnerRCShortName",
+                                   "SPID",
+                                   "PortType"};    
+//
+// Pull transaction data from passed dictionary data
+//
+if(containsKey(keyVsQuoteValueDict, "SYSTEM")) {
+    system = get(keyVsQuoteValueDict, "SYSTEM");
+}
+print system;
+//inputXML = urldatabypost("https://" + system + ".bigmachines.com/bmfsweb/" + system + "/image/WebServices/ctlPricingRequest.xml", "", "");
+
+//
+// Construct the input message below.   The %TNLIST% placeholder needs be populated with  the TNs coming in 
+// as a parameter to the util function. 
+//
+inputXML = "<?xml version=\"1.0\" encoding=\"utf-8\" ?>"
+    + "<ESLVoIPPortabilityRequest xmlns=\"http://www.centurylink.com/XMLSchema/ESL\">"
+    + "  <CallingSystemName>?LLINGSYSTEM%</CallingSystemName>"
+    + "  <PortabilityRequest>"
+    + "      <TNList>%TNLIST%</TNList>"
+    + "  </PortabilityRequest>"
+    + "</ESLVoIPPortabilityRequest>";
+
+//
+// Following code has been copied from the getPricing UTIL Function.   Currently TN Portability does not need 
+// this data.   Leaving the check here for future expansion into a more generic XML Transformation Utility
+//
+if(containsKey(keyVsQuoteValueDict, "OPPTYID")){
+    inputXML = replace(inputXML, "%OPPTYID%", get(keyVsQuoteValueDict, "OPPTYID"));
+}
+if(containsKey(keyVsQuoteValueDict, "QUOTENUMBER")){
+    inputXML = replace(inputXML, "%REQUESTID%", get(keyVsQuoteValueDict, "QUOTENUMBER"));
+}
+if(containsKey(keyVsQuoteValueDict, "CURRENCY")){
+    inputXML = replace(inputXML, "%QUOTECURRENCY%", get(keyVsQuoteValueDict, "CURRENCY"));
+}
+inputXML = replace(inputXML, "%REQUESTTYPE%", "GenerateQuote");    
+//
+// Embed the TNs to be checked in the message
+//
+tnString = "";
+if (sizeofarray(TNArray) > 0) {
+    //
+    // Building the following block : "<TN>5183819340</TN><TN>5183819341</TN>..."
+    //
+    for curTN in TNArray {
+        tnString = tnString + "<TN>" + curTN + "</TN>";
+    }
+} else {
+    //
+    // Error handling needs to be enhanced for cases where we possibly send an empty TNLIST into the UTIL.  For 
+    // now send a 10-digit string of 0s. 
+    //
+    tnString = "<TN>0000000000</TN>";
+}
+//
+// Now place the TNList in the message.
+//
+inputXML = replace(inputXML, "%TNLIST%",tnString);
+
+//
+// Obtain the right data to send the message to the gateway. 
+//
+cxgPortabilityURL   = "";
+cxgPortabilityCreds = "";
+callingSystemName   = "CPQ";
+
+globalVarsResult = bmql("SELECT Keyword, Value FROM ctlGlobalVars");
+for val in globalVarsResult {
+    if(get(val, "Keyword") == "CXG_PORTABILITY_URL"){
+        cxgPortabilityURL = get(val, "Value");
+    }
+    if(get(val, "Keyword") == "CXG_PORTABILITY_CREDENTIAL_B64"){
+        cxgPortabilityCreds = get(val, "Value");
+    }
+    if(get(val, "Keyword") == "CALLING_SYS_NAME"){
+        callingSystemName = get(val, "Value");
+    }
+}
+//Substitute the calling system name from the table value.
+inputXML = replace(inputXML, "?LLINGSYSTEM%", callingSystemName);
+//
+// Populate the header dictionary with credentials
+// NOTE: the credentials should be specified in BASE64 format. username:password is converted to BASE64 format
+put(inputHeaders, "Authorization", "Basic "+ cxgPortabilityCreds);
+put(inputHeaders, "Content-Type", "text/xml");
+// 
+// XML_PRINT - for debugging purposes, uncomment the next line but always replace comments
+print "inputXML:";
+print inputXML;
+print "inputHeaders:";
+print inputHeaders;
+print "cxgPortabilityURL:";
+print cxgPortabilityURL;
+
+// Record the time immediately before calling the service.  Add no code between this and the urldatabypost call
+msTimeOnSvcCallout   = getcurrenttimeinmillis();
+    
+// Mock Response to support unit test framework
+//
+if(containsKey(keyVsQuoteValueDict, "XMLResponse")) {
+    // If it is provided, use the mocked response
+    print "Using mocked XML response";
+    outputXML = get(keyVsQuoteValueDict, "XMLResponse");
+} else {
+    // If no mock provided, use the real call to get a response
+    print "***** Calling ESL Service *****";
+    outputXML = trim(urldatabypost(cxgPortabilityURL, inputXML, "NULL", inputHeaders));
+}
+// Record the time immediately after calling the service.  Add no code between this and the urldatabypost call
+msTimeOnSvcReturn    = getcurrenttimeinmillis();
+print "Returned from ESL Service Call";
+// XML_PRINT - for debugging purposes, uncomment the next line but always replace comments
+print "outputXML:";
+print outputXML ;
+print "********************************";
+//
+// Remove all name-space indicators from tags
+outputXML = replace(outputXML, "<esl:", "<");
+outputXML = replace(outputXML, "</esl:", "</");
+outputXML = replace(outputXML, "<e:", "<");
+outputXML = replace(outputXML, "</e:", "</");
+//
+// If the output XML has a NULL value, report an error back to the caller
+//
+if(startswith(outputXML, "NULL")){
+    put(docNumVsGeneralInfoDict, "INTEGRATION_ERROR", "There was an error with the Check TN Portability Web Service.");
+}
+else {
+    //
+    // Return the message output to the caller. 
+    //
+    put(docNumVsGeneralInfoDict, "DEBUG_OUTPUT", outputXML);
+    getErrorMsg = false;
+    // Loop through the Tag List set up above.
+    //
+    print "***** STARTING EVALUATION OF listOfTags: *****";
+    for searchTag in listOfTags {
+        //
+        // Construct the XML Tag to search for
+        //
+        print "evaluating tag: " + searchTag;
+        
+        dataInTag         = "";    
+        blankTag          = "<" + searchTag + "/>";
+        startTag          = "<" + searchTag + ">";
+        startTagWithExtra = "<" + searchTag + " ";
+        endTag            = "</" + searchTag + ">";
+            
+        startLen = len(startTag);
+        endLen   = len(endTag);
+        //
+        // If the tag we are looking for is blank: <SampleTag/> ignore it.
+        //
+        if(find(outputXML, blankTag) <> -1){
+            dataInTag = "";
+        } elif((find(outputXML, startTag) <> -1) AND (find(outputXML, endTag) <> -1)){
+        //
+        // Else, Copy the section between that start and the end tag
+        //
+            dataInTag = substring(outputXML, find(outputXML, startTag) + startLen, find(outputXML, endTag));
+        }
+        // Else, another way to copy the data values
+        //
+        elif((find(outputXML, startTagWithExtra) <> -1) AND (find(outputXML, endTag) <> -1)){
+                temp = substring(outputXML, find(outputXML, startTagWithExtra) +  startLen, find(outputXML, endTag)); 
+                pos = find(temp,">");
+                dataInTag = substring(temp, pos + 1, len(temp));
+        }
+        else {
+            dataInTag = "NULL";
+        }
+        //
+        //  This is where we get more granular where we pull the actual data from the XML blob
+        //
+        print "dataInTag:" + dataInTag;
+         
+        if(searchTag == "PortabilityResponseList") {
+            //
+            // This section needs work. 
+            //
+            tnPortList = dataInTag;
+        }
+        if(searchTag == "ProcessStatus"){
+            if(upper(dataInTag) == constFAILURE){
+                getErrorMsg = true;
+            } elif (upper(dataInTag) == constSUCCESS) {
+                getErrorMsg = false; 
+            }
+        }
+        //
+        // If the Process Status is FAILURE extract the Error Code and the Message from the XML response.  
+        // This code should not be confused with the code in the TNPortabilityResponseList
+        //
+        if((searchTag == constFAILURE) AND upper(dataInTag) <> "NULL" AND getErrorMsg == true) {
+            statusStartTag  = "<Status>";
+            statusEndTag    = "</Status>";
+            codeStartTag    = "<Code>";
+            codeEndTag      = "</Code>";
+            messageStartTag = "<Message>";
+            messageEndTag   = "</Message>";
+            eslStatusInTag  = substring(dataInTag, find(dataInTag, statusStartTag) 
+                            + len(statusStartTag), find(dataInTag, statusEndTag));
+            eslCodeInTag    = substring(dataInTag, find(dataInTag, codeStartTag) 
+                            + len(codeStartTag), find(dataInTag, codeEndTag));
+            eslMsgInTag     = substring(dataInTag, find(dataInTag, messageStartTag) 
+                            + len(messageStartTag), find(dataInTag, messageEndTag));
+
+            errorStr        = eslMsgInTag + " Error Status:" + eslStatusInTag + " Error Code:" + eslCodeInTag;
+            put(docNumVsGeneralInfoDict, "INTEGRATION_ERROR", errorStr);
+        }
+        //
+        // The next section is intended as a catchall section
+        //
+        elif((searchTag <> "PortabilityResponse") AND upper(dataInTag) <> "NULL" AND getErrorMsg == true){
+            put(docNumVsGeneralInfoDict, "INTEGRATION_ERROR", "Unknown process integration error.");
+        }
+    } // Done looping throug the tag list
+}
+//
+// At this time tnPortList is should be holding responses for all the TNs submitted to ESL.   Split them out of 
+// the array and make them into a string.   
+//
+tnPortList  = replace(tnPortList, "</PortabilityResponse><PortabilityResponse>","</PortabilityResponse>!@!<PortabilityResponse>");
+tnPortArray = split(tnPortList, "!@!");
+    
+//
+// We have made it to evaluating the TN list.   This is where the listOfInnerTags comes in. 
+//
+print "tnPortArray:";
+print tnPortArray;
+
+//
+// Now we have the TN Port messages split out into an array.   For each TN create a dictionary string
+//
+for config in tnPortArray {
+
+    //
+    // First capture the TN we are currently working on.  The config string SHOULD have a TN 
+    //
+    configDocNum        = "";
+    configTnKey = util.getTagInnerXML(config, "TN");
+    if(configTnKey == ""){ConfigTnKey = "NOT FOUND:" + "TN";}
+    print "configTnKey:" + configTnKey;
+
+    //
+    // First capture the TN we are currently working on.  The config string SHOULD have a TN 
+    //
+         
+    print "******** Values in tnPortArray ************";
+    print "looping through tnPortArray config: " + config;
+    print "***** STARTING EVALUATION OF listOfInnerTags: *****";
+
+    tnResponseString  = parentOuterDelim;
+
+    for searchTag in listOfInnerTags {  //Get the line document number for each PriceItemResponse.
+        outputXML         = config;
+        searchData	  = "";
+        dataInTag         = "";    
+        blankTag          = "<" + searchTag + "/>";
+        startTag          = "<" + searchTag + ">";
+        startTagWithExtra = "<" + searchTag + " ";
+        endTag            = "</" + searchTag + ">";
+            
+        startLen = len(startTag);
+        endLen   = len(endTag);
+
+ 	print "Searching for searchTag:" + searchTag;
+        //print "outputXML:" + outputXML;
+
+
+        searchData = util.getTagInnerXML(config, searchTag);
+	if(searchData == ""){searchData = "NOT FOUND:" + searchTag;}
+	print "SearchData:" + searchData;
+	
+	tnResponseString = tnResponseString + SearchTag + parentInnerDelim + searchData + parentValueDelim;
+         
+ 
+        if(find(outputXML, blankTag) <> -1){
+            dataInTag = "";
+        }
+        elif((find(outputXML, startTag) <> -1) AND (find(outputXML, endTag) <> -1)){
+            dataInTag = substring(outputXML, find(outputXML, startTag) + startLen, find(outputXML, endTag));
+        }
+        elif((find(outputXML, startTagWithExtra) <> -1) AND (find(outputXML, endTag) <> -1)){
+            temp = substring(outputXML, find(outputXML, startTagWithExtra) +  startLen, find(outputXML, endTag)); 
+            pos = find(temp,">");
+            dataInTag = substring(temp, pos + 1, len(temp));
+        }
+        else{
+            dataInTag = "NULL";
+        }
+        //
+        // Now stuff the data in the 
+        //
+        print "dataInTag:" + dataInTag;
+        
+        if(searchTag == "PortabilityResponseList") {
+            //
+            // This section needs work. 
+            //
+            tnPortList = dataInTag;
+        }
+        if(searchTag == "ProcessStatus"){
+            if(upper(dataInTag) == constFAILURE){
+                getErrorMsg = true;
+            } elif (upper(dataInTag) == constSUCCESS) {
+                getErrorMsg = false; 
+            }
+        }
+        
+
+            
+    } // Done looping through listOfInnerTag
+    
+    tnResponseString = tnResponseString + parentOuterDelim;
+    print "tnResponseString:" + tnResponseString; 
+    
+
+    if (tnResponseString <> ""){
+        put(docNumVsPortStringsDict, configTnKey, tnResponseString);
+    }
+ 
+ 
+}            
+
+put(retDict, "PORTABILITY_STRING", docNumVsPortStringsDict);
+put(retDict, "TOTAL_STRING", docNumVsTotalStringsDict);
+
+// Time immediately before returning from the utility.  
+// Put no code between this next block and the return statement
+msTimeOnUtilityExit = getcurrenttimeinmillis();
+msUtilityDuration    = msTimeOnUtilityExit - msTimeOnUtilityEntry;
+if (msTimeOnSvcCallout <> -1 AND msTimeOnSvcReturn <> -1) {
+    msSvcCalloutDuration = msTimeOnSvcReturn - msTimeOnSvcCallout;
+}
+put(docNumVsGeneralInfoDict, "INSTRUMENTATION", 
+    "Total Utility Time^=^" + 
+    string(msUtilityDuration) +
+    "^-^Total Callout Time^=^" +
+    string(msSvcCalloutDuration));
+// End of code to compute and record instrumentation (timing)
+
+// Moved here so the instrumentation results can be returned
+put(retDict, "GENERAL_INFO", docNumVsGeneralInfoDict);      
+
+
+return retDict;

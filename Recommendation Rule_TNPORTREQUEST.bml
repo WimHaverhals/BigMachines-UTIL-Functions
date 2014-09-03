@@ -1,0 +1,87 @@
+//************************************************************************************************************
+//** Function:    Validate TN Portability Request String (ctlValidateTnPortabilityRequestString)
+//** Type:        Utility Library Function   
+//**
+//** Description: The TN Portability Request String is User-Entered, so we need to perform validation
+//**              on it.   The same validation needs to occur in multiple places of the process which
+//**              is why we are moving the repeatable code to a UTIL Function. 
+//**
+//** Util Params: String        tnPortabilityRequestString
+//** Return type: String        reqValidationStatusString            ; Has format of <STATUS>!@!<MESSAGE>
+//**              
+//**
+//** History:     Date		Author		Story		Comment
+//**		  08/26/2014	Wim Haverhals	US2841		Initial Build
+//************************************************************************************************************
+//
+print "***** ctlValidateTnPortabilityRequestString UTIL Function is called";
+print "tnPortabilityRequestString:" + tnPortabilityRequestString + " ; Lenght of string:";
+print len(tnPortabilityRequestString);
+
+//
+// Initialize the Return String
+//
+reqValidationStatusString = "SUCCESS" + "!@!" + "Validating Request Message";
+reqFormatValid            = true;
+//
+// CATCH_CONDITION: Empty Request
+// First ensure we have some characters to evaluate in the request string
+//
+If (isnull(trim(tnPortabilityRequestString)) OR (len(tnPortabilityRequestString) == 0)  ) {
+    //
+    // If we hit this condition the request string is empty.   Get out. 
+    //
+    reqValidationStatusString = "ERROR" + "!@!" + "Enter 10-digit TNs as follows: TN1,TN2, etc.";
+    reqFormatValid = false;
+    return reqValidationStatusString; //Return the message to caller 
+
+}
+//
+// CATCH_CONDITION: Placeholder in Request String
+// This section may be removed later when the Placeholder Functionality gets implemented.
+//
+If ( find(tnPortabilityRequestString,"Enter the numbers you wish to check for portability.") <> -1) {
+
+    reqValidationStatusString = "WARNING" + "!@!" + "Enter 10-digit TNs as follows: TN1,TN2, etc.";
+    reqFormatValid = false;
+    return reqValidationStatusString; //Return the message to caller 
+
+}
+//
+// CATCH_CONDITION: Check for TNs in correct format in string
+// The request string should have either 10-digit numbers or ranges delimited by a comma (,)
+//
+requestArray = split (tnPortabilityRequestString,",");
+
+print "requestArray:";
+print requestArray;
+//
+// Loop through the requestArray that we obtained through the SPLIT function
+//
+for requestTn in requestArray {
+    //
+    // Check the characteristics of a single TN
+    //
+    print "Evaluating TN:" + requestTn;
+
+    if (NOT isnumber(requestTN)) {
+        //
+        // If the TN is not a number then we have a problem
+        //
+        reqValidationStatusString = "ERROR" + "!@!" + "Invalid TN Format.  Puleeeaaaase enter 10-digit TNs as follows: TN1,TN2, etc.";
+        reqFormatValid = false;
+        return reqValidationStatusString; //Return the message to caller     
+    }
+
+    if (len(requestTN) <> 10) {
+        //
+        // If the length of the string is not 10 -- GET OUT!!!!
+        //
+        reqValidationStatusString = "ERROR" + "!@!" + "Invalid TN Format.  Puleeeaaaase enter 10-digit TNs as follows: TN1,TN2, etc.";
+        reqFormatValid = false;
+        return reqValidationStatusString; //Return the message to caller     
+    }
+}
+
+print "DONE CALLING UTIL FUNCTION.  RETURN STRING:" + reqValidationStatusString;
+return reqValidationStatusString;

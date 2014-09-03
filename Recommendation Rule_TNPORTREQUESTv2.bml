@@ -1,0 +1,154 @@
+//************************************************************************************************************
+//** Function:    Validate TN Portability Request String (ctlValidateTnPortabilityRequestString)
+//** Type:        Utility Library Function   
+//**
+//** Description: The TN Portability Request String is User-Entered, so we need to perform validation
+//**              on it.   The same validation needs to occur in multiple places of the process which
+//**              is why we are moving the repeatable code to a UTIL Function.
+//**              The format the Request String needs to adhere is : <TN1>,<TN2>,<RANGE1>,<RANGE2>...
+//**              where <TN> is a 10 digit numeric phone number, or <RANGE> is <NPA><NXX><RANGE_MIN>-<RANGE_MAX>
+//**
+//** Util Params: String        tnPortabilityRequestString
+//** Return type: String        reqValidationStatusString            ; Has format of <STATUS>!@!<MESSAGE>!@!<SCRUBBED REQUEST>
+//**              
+//**
+//** History:     Date		    Author		    Story		Comment
+//**	          08/26/2014	Wim Haverhals	            US2841		Initial Build
+//**              09/03/2014    Wim Haverhals               US2842      Add Range Command Validation
+//************************************************************************************************************
+//
+print "*******************************************************************";
+print "***** ctlValidateTnPortabilityRequestString UTIL Function is called";
+print "tnPortabilityRequestString:" + tnPortabilityRequestString + " ; Lenght of string:";
+print len(tnPortabilityRequestString);
+//
+// Declare constants and local variables
+//
+constSUCCESS = "SUCCESS";
+constFAILURE = "FAILURE";
+constWARNING = "WARNING";
+
+tnValidDict  = dict("dict<string>");			// return dictionary to capture result from tnvalid UTIL 
+tnRowDict    = dict("string");                          // TN Row Dictionary returned from UTIL, key(s): TN_DISPLAY/TN_GOOD/TN_MESSAGE
+
+//
+// Initialize the Return String to SUCCESS
+//
+reqValidationStatusString = constSUCCESS + "!@!" + "Validating Request Message" + "!@!" + "<SCRUBBED TN PORT REQUEST STRING>";
+reqFormatValid            = true;
+scrubbedRequestString     = "";
+//
+// NOW START STEPPING THROUGH A SERIES OF VALIDATIONS THAT CHECK THE USER-ENTERED REQUEST STRING.
+// Order of the IF statements is important!
+//
+
+// CATCH_CONDITION 001: Empty Request
+// First ensure we have some characters to evaluate in the request string
+//
+If (isnull(trim(tnPortabilityRequestString)) OR (len(tnPortabilityRequestString) == 0)  ) {
+    //
+    // If we hit this condition the request string is empty.   This is not an invalid entry so make the status SUCCESS.  
+	// Get out or UTIL function with a success status 
+    //
+    reqValidationStatusString = "SUCCESS" + "!@!" + "Enter 10-digit TNs as follows: TN1,TN2, etc.";
+    reqFormatValid = false;
+    return reqValidationStatusString; //Return the message to caller 
+
+}
+//
+// CATCH_CONDITION (002): Placeholder in Request String
+// This section may be removed later when the Placeholder Functionality gets implemented.
+//
+If ( find(tnPortabilityRequestString,"Enter the numbers you wish to check for portability.") <> -1) {
+
+    reqValidationStatusString = "WARNING" + "!@!" + "Enter 10-digit TNs as follows: TN1,TN2, etc.";
+    reqFormatValid = false;
+    return reqValidationStatusString; //Return the message to caller 
+}
+
+//
+// CATCH_CONDITION (003): Check for RequestElements in correct format in string
+// The request string should have either 10-digit numbers or ranges delimited by a comma (,)
+//
+requestArray = split(tnPortabilityRequestString,",");
+
+print "requestArray before we loop through it:";
+print requestArray;
+//
+// Loop through the requestArray that we obtained through the SPLIT function
+//
+for requestElement in requestArray {
+    //
+    // Check the characteristics of a single TN or TN_RANGE command
+    //
+ 	
+    print "Evaluating requestElement:" + requestElement;
+    //
+    // Execute Neil's handy dandy util function.   This util function will soon accept multiple TNs. 
+    // When that happens move the call out of the for-loop
+    //
+    tnValidDict = (util.ctlTnValid,requestElement);
+    tnRowDict   = get(tnValidDict,requestElement);          // TN Row Dictionary, key(s): TN_DISPLAY/TN_GOOD/TN_MESSAGE
+    print "Value of tnRowDict:";
+    print tnRowDict;
+    //
+    // Now set the working variables for this iteration of the for-loop
+    //
+    tnValid   = get(tnRowDict,"TN_GOOD");				// returns string "true' or "false"
+    tnMessage = get(tnRowDict,"TN_MESSAGE");	
+    tnDisplay = get(tnRowDict,"TN_DISPLAY");
+    print "tnValid:" + tnValid;
+    print "tnDisplay:" + tnDisplay;
+    print "tnMessage:" + tnMessage;
+    
+    //
+    // Account for the cases where the user has put in multiple adjacent commas, or has entered a comma (,) at the end of the 
+    // request string.   Extra commas will leave empty array elements after 'splitting'
+    //
+    if (isnull(requestElement)) {
+        //
+	// We hit an empty Element.   This condition does not have to result in an error.   Skip it and remove it from the  Request 
+	// string.
+	//
+	print "We hit an empty element...This element will NOT be added to the scrubbedRequestString";
+
+    } elif (tnValid == "false") {
+        //
+        // If we get here the request element must be either be an invalid TN or a TN_RANGE.  First check for the invalid TN 
+        //
+	if (tnMessage <> "RANGE") {
+            //
+	    // If the element was not a valid Range Command we want to return an error.   Deal with this first
+	    //            	
+            reqValidationStatusString = "ERROR" + "!@!" + tnMessage;
+            reqFormatValid = false;
+            return reqValidationStatusString; //Return the message to caller     
+
+        } else {
+            //
+            // THE TN_RANGE LOGIC CONTINUES HERE
+            //
+            print "THIS IS WHERE THE RANGE LOGIC WILL EXECUTE";
+        }
+    }
+    //
+    // If we are still looping we have not hit any errors.   So now make sure the scrubbedRequestString gets versioned up
+    //
+    if (NOT (isnull(requestElement))) {
+
+        scrubbedRequestString = scrubbedRequestString + requestElement;
+
+    }
+
+    print "scrubbedRequestString:" + scrubbedRequestString;
+
+}  // End of the FOR Loop
+
+
+//
+// Prepare the Return Value
+//
+reqValidationStatusString = constSUCCESS + "!@!" + "Validating Request Message" + "!@!" + scrubbedRequestString;
+
+
+return reqValidationStatusString;

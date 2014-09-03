@@ -1,0 +1,105 @@
+//************************************************************************************************************
+//** Function:    ctlTnValid
+//** Type:        Utility Library Function   
+//**
+//** Description: Check a string and validate it is a TN in the correct format.  A valid format included the following
+//**              1) 10 Digits
+//**              2) No Alpha Numberics
+//**              3) No special charaters  
+//**              Return a formatted TNs (123) 456-7890 and error message when not formatted correctly.
+//**
+//** Util Params: String 
+//** Return type: Dictionary Type:string;  KEY VALUES: "TN_VALID","TN"
+//**           
+//**
+//** History:     Date		Author		Story		Comment
+//**		  08/28/2014	Neil Belstock	US2842		Initial Build, copied from acqCheckTNPortability
+//**                                                            Util Function.
+//************************************************************************************************************
+//
+// First initialize the Return Dictionary.   This UTIL will support us sending multiple TNs for validation
+// however we will build this out later
+//
+retDict   = dict("dict<string>");    // Return dictionary, key=TN and values are tnRowDict elements
+tnRowDict = dict("string");          // TN Row Dictionary, key(s): TN_DISPLAY/TN_GOOD/TN_MESSAGE
+//
+// Create some dummy values in the Dictionary
+//
+put(tnRowDict,"TN_GOOD","true");                                    // Initialize the row to valid
+put(tnRowDict,"TN_DISPLAY","(000) 000-0000");                       // Initialize the Display TN to zeros
+put(tnRowDict,"TN_MESSAGE","<CONTEXT-SPECIFIC MESSAGE GOES HERE>"); // Initialize the Display TN to 0s
+
+put(retDict,telephoneNumber,tnRowDict);                             // Put one row in return dict
+//
+// Initialize local variables for the utility function
+//
+tnMessage = "";
+    
+// print retDict
+//
+// Here we start with the validity check on the TN passed in. 
+//
+print " The telephone number passed into the util fucntion is:" + telephoneNumber;
+//
+// First the TN needs to be checked that it contains only numerics
+//
+if(NOT isnumber(telephoneNumber)){
+        
+    reqFormatValid = false;
+    print "Error " 
+        + telephoneNumber 
+        + " is an invalid TN Format. Telephone numbers must contain only numbers. Enter 10 digit TNs as follows 1234567890.";
+
+    tnMessage = "Error: " + telephoneNumber + " is not a valid TN.";
+    put(tnRowDict,"TN_GOOD","false");                               
+    put(tnRowDict,"TN_DISPLAY","<<INVALID_TN>>");                       
+    put(tnRowDict,"TN_MESSAGE",tnMessage);
+    put(retDict,telephoneNumber,tnRowDict);
+       
+    return retDict;  //Return the message to caller    
+}
+//
+// Second validate that we have 10 digits in the string
+//
+if (len(telephoneNumber) <> 10) {
+
+    print "Error " + telephoneNumber 
+        + " is an invalid TN Format. Telephone numbers must be 10 numbers";
+    reqFormatValid = false;
+    
+    tnMessage = "Error: " + telephoneNumber + " should be 10 digits long.";
+    put(tnRowDict,"TN_GOOD","false");                               
+    put(tnRowDict,"TN_DISPLAY","<<INVALID_TN>>");                       
+    put(tnRowDict,"TN_MESSAGE",tnMessage);
+    put(retDict,telephoneNumber,tnRowDict);
+       
+    return retDict;  //Return the message to caller        
+}
+//**********************************************************************************************
+// IF WE GET HERE THE TN IS VALID.  Additional checking can be added above this comment section
+//**********************************************************************************************
+//
+// If telephoneNumber is valid, we want a confirmation that the number is valid and return a formatted number
+//   
+strVar    = telephoneNumber;
+start_x   = 0;     // NPA_start
+end_x     = 3;     // NPA_end, NXX_Start
+start_1   = 3;     // NPA
+end_1     = 6;
+start_3   = 6;
+end_3     = 10;
+    
+subStr    = substring(telephoneNumber, start_x, end_x);
+subStr2   = substring(telephoneNumber, start_1, end_1);
+subStr3   = substring(telephoneNumber, start_3, end_3);
+displayTn = "(" + substr + ") " + substr2 + "-" + substr3;
+
+reqFormatValid = true;
+tnMessage = "Success: " + telephoneNumber + " is valid.";
+put(tnRowDict,"TN_GOOD","true");                               
+put(tnRowDict,"TN_DISPLAY",displayTn);                       
+put(tnRowDict,"TN_MESSAGE",tnMessage);
+
+put(retDict,telephoneNumber,tnRowDict); 
+
+return retDict;

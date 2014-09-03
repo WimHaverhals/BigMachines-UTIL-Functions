@@ -1,0 +1,138 @@
+{CURRENCY=USD, QUOTENUMBER=, OPPTYID=}
+[3033220100]
+********** Calling the UTIL Function **********
+***** CTL Check TN Portability has been called *******
+inputXML:
+<?xml version="1.0" encoding="utf-8" ?><ESLVoIPPortabilityRequest xmlns="http://www.centurylink.com/XMLSchema/ESL"> <CallingSystemName>CPQ</CallingSystemName> <PortabilityRequest> <TNList><TN>3033220100</TN></TNList> </PortabilityRequest></ESLVoIPPortabilityRequest>
+inputHeaders:
+{Authorization=Basic Y3BxcG9jQHF4Zy5jZW50dXJ5bGluay5jb206cXhnMDUwMjEy, Content-Type=text/xml}
+cxgPortabilityURL:
+https://websvcs04.test1.embarq.com/cpq/esl/dev/ESLAvailability
+***** Calling ESL Service *****
+Returned from ESL Service Call
+outputXML:
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<ESLVoIPPortabilityResponse xmlns="http://www.centurylink.com/XMLSchema/ESL">
+<ProcessStatus>SUCCESS</ProcessStatus>
+<PortabilityResponseList>
+<PortabilityResponse>
+<TN>3033220100</TN>
+<PortInDays>6</PortInDays>
+<RateCenterInfo>
+<ShortRateCenterName>CO-DENVER</ShortRateCenterName>
+</RateCenterInfo>
+<ServiceProviderName>TCI TELEPHONY SERVICES, INC.</ServiceProviderName>
+<TradingParterInfo>
+<PartnerRCShortName>CO-DENVER</PartnerRCShortName>
+</TradingParterInfo>
+<SPID>7606</SPID>
+<PortType>PORT_IN</PortType>
+</PortabilityResponse>
+</PortabilityResponseList>
+</ESLVoIPPortabilityResponse>
+********************************
+***** STARTING EVALUATION OF listOfTags: *****
+evaluating tag: ProcessStatus
+dataInTag:SUCCESS
+evaluating tag: Exception
+dataInTag:NULL
+evaluating tag: PortabilityResponseList
+dataInTag:
+<PortabilityResponse>
+<TN>3033220100</TN>
+<PortInDays>6</PortInDays>
+<RateCenterInfo>
+<ShortRateCenterName>CO-DENVER</ShortRateCenterName>
+</RateCenterInfo>
+<ServiceProviderName>TCI TELEPHONY SERVICES, INC.</ServiceProviderName>
+<TradingParterInfo>
+<PartnerRCShortName>CO-DENVER</PartnerRCShortName>
+</TradingParterInfo>
+<SPID>7606</SPID>
+<PortType>PORT_IN</PortType>
+</PortabilityResponse>
+evaluating tag: PortabilityResponse
+dataInTag:
+<TN>3033220100</TN>
+<PortInDays>6</PortInDays>
+<RateCenterInfo>
+<ShortRateCenterName>CO-DENVER</ShortRateCenterName>
+</RateCenterInfo>
+<ServiceProviderName>TCI TELEPHONY SERVICES, INC.</ServiceProviderName>
+<TradingParterInfo>
+<PartnerRCShortName>CO-DENVER</PartnerRCShortName>
+</TradingParterInfo>
+<SPID>7606</SPID>
+<PortType>PORT_IN</PortType>
+tnPortArray:
+[<PortabilityResponse>
+<TN>3033220100</TN>
+<PortInDays>6</PortInDays>
+<RateCenterInfo>
+<ShortRateCenterName>CO-DENVER</ShortRateCenterName>
+</RateCenterInfo>
+<ServiceProviderName>TCI TELEPHONY SERVICES, INC.</ServiceProviderName>
+<TradingParterInfo>
+<PartnerRCShortName>CO-DENVER</PartnerRCShortName>
+</TradingParterInfo>
+<SPID>7606</SPID>
+<PortType>PORT_IN</PortType>
+</PortabilityResponse>]
+configTnKey:3033220100
+******** Values in tnPortArray ************
+looping through tnPortArray config: <PortabilityResponse>
+<TN>3033220100</TN>
+<PortInDays>6</PortInDays>
+<RateCenterInfo>
+<ShortRateCenterName>CO-DENVER</ShortRateCenterName>
+</RateCenterInfo>
+<ServiceProviderName>TCI TELEPHONY SERVICES, INC.</ServiceProviderName>
+<TradingParterInfo>
+<PartnerRCShortName>CO-DENVER</PartnerRCShortName>
+</TradingParterInfo>
+<SPID>7606</SPID>
+<PortType>PORT_IN</PortType>
+</PortabilityResponse>
+***** STARTING EVALUATION OF listOfInnerTags: *****
+Searching for searchTag:TN
+SearchData:3033220100
+dataInTag:3033220100
+Searching for searchTag:VoIPMessage
+SearchData:NULL
+dataInTag:NULL
+Searching for searchTag:Code
+SearchData:NULL
+dataInTag:NULL
+Searching for searchTag:PortInDays
+SearchData:6
+dataInTag:6
+Searching for searchTag:RateCenterInfo
+SearchData:
+<ShortRateCenterName>CO-DENVER</ShortRateCenterName>
+dataInTag:
+<ShortRateCenterName>CO-DENVER</ShortRateCenterName>
+tnResponseString:$=$TN$-$3033220100$*$VoIPMessage$-$NULL$*$Code$-$NULL$*$PortInDays$-$6$*$RateCenterInfo$-$
+<ShortRateCenterName>CO-DENVER</ShortRateCenterName>
+$*$$=$
+********** Done calling UTIL Function ***********
+{PORTABILITY_STRING={3033220100=$=$TN$-$3033220100$*$VoIPMessage$-$NULL$*$Code$-$NULL$*$PortInDays$-$6$*$RateCenterInfo$-$
+<ShortRateCenterName>CO-DENVER</ShortRateCenterName>
+$*$$=$}, TOTAL_STRING={}, GENERAL_INFO={INSTRUMENTATION=Total Utility Time^=^1741^-^Total Callout Time^=^1735, DEBUG_OUTPUT=<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<ESLVoIPPortabilityResponse xmlns="http://www.centurylink.com/XMLSchema/ESL">
+<ProcessStatus>SUCCESS</ProcessStatus>
+<PortabilityResponseList>
+<PortabilityResponse>
+<TN>3033220100</TN>
+<PortInDays>6</PortInDays>
+<RateCenterInfo>
+<ShortRateCenterName>CO-DENVER</ShortRateCenterName>
+</RateCenterInfo>
+<ServiceProviderName>TCI TELEPHONY SERVICES, INC.</ServiceProviderName>
+<TradingParterInfo>
+<PartnerRCShortName>CO-DENVER</PartnerRCShortName>
+</TradingParterInfo>
+<SPID>7606</SPID>
+<PortType>PORT_IN</PortType>
+</PortabilityResponse>
+</PortabilityResponseList>
+</ESLVoIPPortabilityResponse>}
