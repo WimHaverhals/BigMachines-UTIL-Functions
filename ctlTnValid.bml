@@ -2,24 +2,33 @@
 //** Function:    ctlTnValid
 //** Type:        Utility Library Function   
 //**
-//** Description: Check a string and validate it is a TN in the correct format.  A valid format included the following
+//** Description: UTIL Function will accept a TN Portability Request Element, which can either be a TN or a 
+//**              TN_Range, or multiple TN Request Elements delimited by a comma (,)
+//**              TN - TN in the correct format.  A valid format included the following
+//**              TN_Range - Has to have a dash an needs to be 15 characters long
 //**              1) 10 Digits
 //**              2) No Alpha Numberics
 //**              3) No special charaters  
 //**              Return a formatted TNs (123) 456-7890 and error message when not formatted correctly.
 //**
-//** Util Params: String 
-//** Return type: Dictionary Type:string;  KEY VALUES: "TN_VALID","TN"
-//**           
 //**
+//** Util Params: telephoneNumber  String 
+//**
+//** Return type: Dictionary Type:String Dictionary;  KEY VALUES: "TN_VALID","TN","TN_MESSAGE"
+//**           
+//**              retDict    key:tn    value:tnRowDict keys:TN_VALID,"TN","TN_MESSAGE"
+
 //** History:     Date		Author		Story		Comment
 //**		  08/28/2014	Neil Belstock	US2842		Initial Build, copied from acqCheckTNPortability
 //**                                                            Util Function.
+//**              09/04/2014    Neil Belstock   US2842          Update to allow multiple TNs to be validated
 //************************************************************************************************************
 //
-// First initialize the Return Dictionary.   This UTIL will support us sending multiple TNs for validation
+// First initialize the Return Dictionary.   
+// This UTIL supports sending multiple TNs for validation as follows: TN1,TN2,TN3,etc.
 // however we will build this out later
 //
+
 retDict   = dict("dict<string>");    // Return dictionary, key=TN and values are tnRowDict elements
 tnRowDict = dict("string");          // TN Row Dictionary, key(s): TN_DISPLAY/TN_GOOD/TN_MESSAGE
 //
@@ -27,79 +36,226 @@ tnRowDict = dict("string");          // TN Row Dictionary, key(s): TN_DISPLAY/TN
 //
 put(tnRowDict,"TN_GOOD","true");                                    // Initialize the row to valid
 put(tnRowDict,"TN_DISPLAY","(000) 000-0000");                       // Initialize the Display TN to zeros
-put(tnRowDict,"TN_MESSAGE","<CONTEXT-SPECIFIC MESSAGE GOES HERE>"); // Initialize the Display TN to 0s
+put(tnRowDict,"TN_MESSAGE","<CONTEXT-SPECIFIC MESSAGE GOES HERE>"); // Initialize the Display Message
 
 put(retDict,telephoneNumber,tnRowDict);                             // Put one row in return dict
+
 //
 // Initialize local variables for the utility function
 //
 tnMessage = "";
+requestValid   = true;
     
-// print retDict
 //
-// Here we start with the validity check on the TN passed in. 
+// The telephoneNumber string parameter that this Util is called with can either be 
+// a single TN, a TN_RANGE, or a collection of either delimited by a comma (,)
+// 
+requestArray = split(telephoneNumber,",");
+
+print "requestArray before we loop through it:";
+print requestArray;
 //
-print " The telephone number passed into the util fucntion is:" + telephoneNumber;
+// Loop through the requestArray that we obtained through the SPLIT function
 //
-// First the TN needs to be checked that it contains only numerics
-//
-if(NOT isnumber(telephoneNumber)){
+for requestElement in requestArray {
+    tnMessage = "";
+    requestValid = true;    // INIT TO VALID
+    isRange      = false;
+    //
+    // Here we start with the validity check the element.  First check 
+    // for a TN_RANGE 
+    //
+    print "requestElement:" + requestElement;
+    //
+    // Start with some fuzzy logic.  (if it fails here other logic will catch
+    // down below it.   A range follows this format: 1112223333-4444, the 
+    // The dash is in position 11.   If a dash is found in position 9,10,11,12,13
+    // then ASSUME we are looking at a range
+    //
+    rangeIndicator = substring(requestElement,8,13);
+    isRange        = false;
+    if (find(rangeIndicator,"-") <> -1) {isRange = true;} // The dash was found in the command
+
+    if (isRange) {
+        //
+        // Range logic starts here.  The range command follows a strict format.   First split out the components:
+        // 1112223333-4444
+        //
+        tnRngNPA   = substring(requestElement,0,3);
+        tnRngNXX   = substring(requestElement,3,6);
+        tnRngMIN   = substring(requestElement,6,10);
+        tnRngDelim = substring(requestElement,10,11);
+        tnRngMAX   = substring(requestElement,11,15);
+
+        if (len(requestElement) <> 15) {
+            //
+            // CONDITION == Range Request must be 15 characters long
+            //
+            requestValid = false;
+            tnMessage    = requestElement + " - Invalid Range Format.  Should be exactly 15 characters.";
+            put(tnRowDict,"TN_GOOD","false");                               
+            put(tnRowDict,"TN_DISPLAY","<<INVALID_RANGE>>");                       
+            put(tnRowDict,"TN_MESSAGE",tnMessage);
+            put(retDict,requestElement,tnRowDict);
+            //
+            // That sets the return status for the current requestElement
+            // skip the rest of the logic and get the next element
+            //
+            continue;            
+        } // END CONDITION
+
+        if ( (NOT (isnumber(tnRngNPA))) OR  
+             (NOT (isnumber(tnRngNXX))) ) {
+            //
+            // CONDITION == NPANXX must be numeric
+            //
+            requestValid = false;
+            tnMessage = requestElement + " - Invalid Range Format.  NPANXX must be numeric.";
+            put(tnRowDict,"TN_GOOD","false");                               
+            put(tnRowDict,"TN_DISPLAY","<<INVALID_RANGE>>");                       
+            put(tnRowDict,"TN_MESSAGE",tnMessage);
+            put(retDict,requestElement,tnRowDict);
+            //
+            // That sets the return status for the current requestElement
+            // skip the rest of the logic and get the next element
+            //
+            continue;            
+        } // END CONDITION
+ 
+        //
+        // CONDITION == RANGE_MIN and RANGE MAX must be numeric
+        //            
+        if ( (NOT (isnumber(tnRngMIN))) OR (NOT (isnumber(tnRngMAX))) ) {
+
+            requestValid = false;
+            tnMessage = requestElement + " - Invalid Range Format.  Range MIN-MAX must be numeric.";
+            put(tnRowDict,"TN_GOOD","false");                               
+            put(tnRowDict,"TN_DISPLAY","<<INVALID_RANGE>>");                       
+            put(tnRowDict,"TN_MESSAGE",tnMessage);
+            put(retDict,requestElement,tnRowDict);
+            //
+            // That sets the return status for the current requestElement
+            // skip the rest of the logic and get the next element
+            //
+            continue;            
+        } // END CONDITION
+
+        //
+        // CONDITION == Range MIN must be <= Range MAX
+        //
+        rangeMinInt = atoi(tnRngMIN);
+        rangeMaxInt = atoi(tnRngMAX);
+
+        if (rangeMaxInt < rangeMinInt) {
+            requestValid = false;
+            tnMessage = requestElement + " - Invalid Range Format.  MIN must be <= MAX";
+            put(tnRowDict,"TN_GOOD","false");                               
+            put(tnRowDict,"TN_DISPLAY","<<INVALID_RANGE>>");                       
+            put(tnRowDict,"TN_MESSAGE",tnMessage);
+            put(retDict,requestElement,tnRowDict);
+            //
+            // That sets the return status for the current requestElement
+            // skip the rest of the logic and get the next element
+            //
+            continue;            
+        } // END CONDITION
+
+        //
+        // CONDITION == Difference between RangeMAX and RangeMIN must be <= 1000
+        //
+        if ((rangeMaxInt - rangeMinInt) > 1000) {
+            requestValid = false;
+            tnMessage    = requestElement + " - Invalid Range Format.  Maximum TNs allowed is 1000.";
+            put(tnRowDict,"TN_GOOD","false");                               
+            put(tnRowDict,"TN_DISPLAY","<<INVALID_RANGE>>");                       
+            put(tnRowDict,"TN_MESSAGE",tnMessage);
+            put(retDict,requestElement,tnRowDict);
+            //
+            // That sets the return status for the current requestElement
+            // skip the rest of the logic and get the next element
+            //
+            continue;            
+        } // END CONDITION
+
+    } else { // END RANGE LOGIC else TN
+
+        //
+        // =========== TN LOGIC STARTS HERE ==============
+        // First the TN needs to be checked that it contains only numerics
+        //
+        if(NOT isnumber(requestElement)){
         
-    reqFormatValid = false;
-    print "Error " 
-        + telephoneNumber 
-        + " is an invalid TN Format. Telephone numbers must contain only numbers. Enter 10 digit TNs as follows 1234567890.";
-
-    tnMessage = "Error: " + telephoneNumber + " is not a valid TN.";
-    put(tnRowDict,"TN_GOOD","false");                               
-    put(tnRowDict,"TN_DISPLAY","<<INVALID_TN>>");                       
-    put(tnRowDict,"TN_MESSAGE",tnMessage);
-    put(retDict,telephoneNumber,tnRowDict);
+            requestValid = false;
+            tnMessage = requestElement + " - Invalid TN Format.  Must be numeric.";
+            put(tnRowDict,"TN_GOOD","false");                               
+            put(tnRowDict,"TN_DISPLAY","<<INVALID_TN>>");                       
+            put(tnRowDict,"TN_MESSAGE",tnMessage);
+            put(retDict,requestElement,tnRowDict);
        
-    return retDict;  //Return the message to caller    
-}
-//
-// Second validate that we have 10 digits in the string
-//
-if (len(telephoneNumber) <> 10) {
+            continue;
+        }
+        //
+        // Second validate that we have 10 digits in the string
+        //
+        if (len(requestElement) <> 10) {
 
-    print "Error " + telephoneNumber 
-        + " is an invalid TN Format. Telephone numbers must be 10 numbers";
-    reqFormatValid = false;
+            //print "Error " + requestElement
+            //    + " is an invalid TN Format. Telephone numbers must be 10 numbers";
+
+            requestValid = false;
     
-    tnMessage = "Error: " + telephoneNumber + " should be 10 digits long.";
-    put(tnRowDict,"TN_GOOD","false");                               
-    put(tnRowDict,"TN_DISPLAY","<<INVALID_TN>>");                       
-    put(tnRowDict,"TN_MESSAGE",tnMessage);
-    put(retDict,telephoneNumber,tnRowDict);
-       
-    return retDict;  //Return the message to caller        
-}
-//**********************************************************************************************
-// IF WE GET HERE THE TN IS VALID.  Additional checking can be added above this comment section
-//**********************************************************************************************
-//
-// If telephoneNumber is valid, we want a confirmation that the number is valid and return a formatted number
-//   
-strVar    = telephoneNumber;
-start_x   = 0;     // NPA_start
-end_x     = 3;     // NPA_end, NXX_Start
-start_1   = 3;     // NPA
-end_1     = 6;
-start_3   = 6;
-end_3     = 10;
+            tnMessage = requestElement + " - Invalid TN Format.  Should be 10 digits long.";
+            put(tnRowDict,"TN_GOOD","false");                               
+            put(tnRowDict,"TN_DISPLAY","<<INVALID_TN>>");                       
+            put(tnRowDict,"TN_MESSAGE",tnMessage);
+            put(retDict,requestElement,tnRowDict);
+
+            continue;       
+        }
+    }
+    //
+    //
+    //**********************************************************************************************
+    // IF WE GET HERE THE TN IS VALID.  Additional checking can be added above this comment section
+    //**********************************************************************************************
+    //
+    // If telephoneNumber is valid, we want a confirmation that the number is valid and return a formatted number
+    // we can use requestValid to decide what goes in the dictionary
     
-subStr    = substring(telephoneNumber, start_x, end_x);
-subStr2   = substring(telephoneNumber, start_1, end_1);
-subStr3   = substring(telephoneNumber, start_3, end_3);
-displayTn = "(" + substr + ") " + substr2 + "-" + substr3;
+    if (isRange) {
 
-reqFormatValid = true;
-tnMessage = "Success: " + telephoneNumber + " is valid.";
-put(tnRowDict,"TN_GOOD","true");                               
-put(tnRowDict,"TN_DISPLAY",displayTn);                       
-put(tnRowDict,"TN_MESSAGE",tnMessage);
+        tnMessage = "Success: " + requestElement + " is valid.";
+        put(tnRowDict,"TN_GOOD","true");                               
+        put(tnRowDict,"TN_DISPLAY",requestElement);                       
+        put(tnRowDict,"TN_MESSAGE",tnMessage);
+        put(retDict,requestElement,tnRowDict);  
 
-put(retDict,telephoneNumber,tnRowDict); 
+    } else {
+   
+        strVar    = requestElement;
+        start_x   = 0;     // NPA_start
+        end_x     = 3;     // NPA_end, NXX_Start 
+        start_1   = 3;     // NPA
+        end_1     = 6;
+        start_3   = 6;
+        end_3     = 10;
 
+        subStr    = substring(requestElement, start_x, end_x);
+        subStr2   = substring(requestElement, start_1, end_1);
+        subStr3   = substring(requestElement, start_3, end_3);
+        displayTn = "(" + substr + ") " + substr2 + "-" + substr3;
+
+        tnMessage = "Success: " + requestElement + " is valid.";
+        put(tnRowDict,"TN_GOOD","true");                               
+        put(tnRowDict,"TN_DISPLAY",displayTn);                       
+        put(tnRowDict,"TN_MESSAGE",tnMessage);
+        put(retDict,requestElement,tnRowDict);  
+
+    }
+
+
+
+
+} // This ends the FOR Loop
+    
 return retDict;

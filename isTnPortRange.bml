@@ -1,0 +1,81 @@
+//************************************************************************************************************
+//** Function:    isTnPortRange
+//** Type:        Utility Library Function   
+//**
+//** Description: Accept a string that is supposes to adhere to the TN Portability Range Format:
+//**              
+//**              1) <NPA><NXX><RANGE_MIN>-<RANGE_MAX>
+//**              2) <NPA>, is 3 numeric digits
+//**              3) <NXX>, is 3 numeric digits
+//**              4) <RANGE_MIN>, is 4 numeric digits
+//**              5) <RANGE_MAX>, is 4 numberic digits
+//**		  6) <RANGE_MIN> must be <= <RANGE_MAX>
+//**              7) Range request must be 15 chars
+//**              8) Due to BML Limitation on Array Size Range Request must encompass no more than 1000 TNs
+//**
+//**              Return true if input string is a valid TN Portability  Range Command
+//**
+//** Util Params: 
+//**       Input:    tnPortRangeRequest    Type: String
+//** 
+//**       Return type: Boolean --> Valid Range Command=true
+//**           
+//**
+//** History:     Date		Author		Story		Comment
+//**		  09/04/2014	Neil Belstock	US2842		Initial Build
+//**
+//************************************************************************************************************
+//
+constRangeDelim = "-";    // Range delimiter is a dash
+retVal          = false;  // Range command is invalid until proven valid
+//
+// Initialize local variables for the utility function
+//
+tnRngNPA    = "";
+tnRngNXX    = "";
+tnRngMIN    = "";
+tnRngDelim  = "";
+tnRngMAX    = "";
+
+// print "tnPortRangeRequest:" + tnPortRangeRequest;
+//
+// The range command follows a strict format.   First split out the components:
+// 1112223333-4444
+//
+tnRngNPA   = substring(tnPortRangeRequest,0,3);
+tnRngNXX   = substring(tnPortRangeRequest,3,6);
+tnRngMIN   = substring(tnPortRangerequest,6,10);
+tnRngDelim = substring(tnPortRangerequest,10,11);
+tnRngMAX   = substring(tnPortRangeRequest,11,15);
+
+//print "tnRngNPA  : " + tnRngNPA;
+//print "tnRngNXX  : " + tnRngNXX;
+//print "tnRngMIN  : " + tnRngMIN;
+//print "tnRngDelim: " + tnRngDelim;
+//print "tnRngMAX  : " + tnRngMAX;
+
+if (len(tnPortRangeRequest) <> 15) {return retVal;}    // Range Request must be 15 characters long
+
+if (NOT (isnumber(tnRngNPA))) {return retVal;} // NPA must be numeric
+if (NOT (isnumber(tnRngNXX))) {return retVal;} // NXX must be numeric
+if (NOT (isnumber(tnRngMIN))) {return retVal;} // Range MIN must be numeric
+if (NOT (isnumber(tnRngMAX))) {return retVal;} // Range MAX must be numeric
+
+if (tnRngDelim <> constRangeDelim) {return retVal;}  // Range needs to be delimited by dash
+//
+// Range MIN must be <= Range MAX
+//
+rangeMinInt = atoi(tnRngMIN);
+rangeMaxInt = atoi(tnRngMAX);
+
+if (rangeMaxInt < rangeMinInt) {return retVal;} 
+//
+// Difference between RangeMAX and RangeMIN must be <= 1000
+//
+if ((rangeMaxInt - rangeMinInt) > 1000) {return retVal;}
+
+// ***** ADD ADDITIONAL VALIDATIONS ABOVE *****
+// if we get to this section of the code, the Range Request will be valid
+//
+retVal = true;
+return retVal;

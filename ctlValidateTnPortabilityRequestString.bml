@@ -118,7 +118,7 @@ for requestElement in requestArray {
         //
         // If we get here the request element must be either be an invalid TN or a TN_RANGE.  First check for the invalid TN 
         //
-	if (tnMessage <> "RANGE") {
+	if (NOT( (util.isTnPortRange(requestElement)) )) {
             //
 	    // If the element was not a valid Range Command we want to return an error.   Deal with this first
 	    //            	
@@ -154,7 +154,8 @@ for requestElement in requestArray {
 //
 // Prepare the Return Value
 //
-reqValidationStatusString = constSUCCESS + "!@!" + "Validating Request Message" + "!@!" + scrubbedRequestString;
+reqValidationStatusString = constSUCCESS + "!@!" + "Portability Command is valid" 
+                 + "!@!" + scrubbedRequestString;
 
 
 return reqValidationStatusString;
